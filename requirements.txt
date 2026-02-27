@@ -1,0 +1,5 @@
+# Databricks E2E Project V2 – enterprise-lite
+pyspark>=3.3.0
+delta-spark>=2.3.0
+pyyaml>=6.0
+pytest>=7.0.0
