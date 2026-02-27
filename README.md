@@ -1,110 +1,230 @@
-# Databricks End-to-End Data Engineering Project (Version 2)
+# Retail Analytics Data Platform – Databricks End-to-End Project (V2)
+
 ![CI](https://github.com/Pavankolli0601/databricks-e2e-project-pavan/actions/workflows/tests.yml/badge.svg)
-Enterprise-lite PySpark pipeline: Bronze → Silver → Gold with Delta Lake, modular code, and basic data quality checks.
+
+Retail Analytics Data Platform implemented using Medallion Architecture (Bronze → Silver → Gold) with PySpark, Delta Lake, modular Python packages, automated testing, and GitHub Actions CI.
 
 ---
 
-## Overview
+## Executive Overview
 
-This project ingests parquet datasets (customers, orders, products, regions) from a **configurable input path**, writes raw data to **Bronze** Delta tables, cleans and joins in **Silver**, and produces **Gold** business metrics. All paths are configurable via YAML so the same code runs locally or on Databricks with a mount/volume.
+This repository models a structured Retail Analytics lakehouse pipeline designed to transform raw batch data into curated, analytics-ready Delta tables.
 
-**Stack:** PySpark, Delta Lake, YAML config, pytest for transformation/quality tests.
+The project emphasizes:
 
----
+- Clean modular PySpark design
+- Clear Bronze/Silver/Gold separation
+- Config-driven execution
+- Basic but practical data quality checks
+- Unit-tested transformation logic
+- CI integration for code validation
 
-## Architecture (ASCII)
-
-```
-                    ┌──────────────────────────────────────────────────────────────┐
-                    │                     CONFIG (configs/paths.yaml)              │
-                    │  input_path, bronze_path, silver_path, gold_path             │
-                    └──────────────────────────────────────────────────────────────┘
-                                                │
-  ┌─────────────┐     ┌─────────────┐     ┌─────▼─────┐     ┌─────────────┐
-  │   PARQUET   │     │   BRONZE    │     │  SILVER   │     │    GOLD     │
-  │ (input_path)│────▶│   Delta     │────▶│  Delta    │────▶│   Delta     │
-  │ customers*, │     │ + metadata  │     │ clean +   │     │ metrics     │
-  │ orders*,    │     │ bronze_*    │     │ join      │     │ revenue,    │
-  │ products*,  │     │             │     │ silver_*   │     │ top products│
-  │ regions*    │     │             │     │ orders_   │     │ CLV, counts │
-  └─────────────┘     └─────────────┘     │ enriched  │     └─────────────┘
-                                          └─────────────┘
-                                                │
-                                          ┌─────▼─────┐
-                                          │  QUALITY  │
-                                          │ checks.py │
-                                          └───────────┘
-```
-
-- **Bronze:** Raw ingestion; adds `_ingestion_ts`, `_source_file`. No business logic.
-- **Silver:** Standardize strings, deduplicate by key, join orders with customers/products/regions → `silver_orders_enriched`.
-- **Gold:** Aggregated metrics (revenue by region, top products, customer lifetime value proxy, order counts, orders by date).
-- **Quality:** Row count, null %, duplicate-key checks on silver (and optionally gold).
+The implementation intentionally focuses on clarity and structure rather than advanced performance optimizations, making the architectural patterns easy to follow and extend.
 
 ---
 
-## Project structure
+## Retail Analytics Use Case
 
-```
-configs/           # Paths and table names (change for Databricks)
+The platform ingests batch parquet feeds representing:
+
+- Customers  
+- Orders  
+- Products  
+- Regions  
+
+These raw feeds are transformed into curated Delta tables that support:
+
+- Revenue by region reporting  
+- Top product analysis  
+- Customer lifetime value (CLV proxy)  
+- Order volume tracking  
+- Daily sales trends  
+
+All transformations are implemented using modular Python functions rather than embedded notebook logic.
+
+---
+
+## Actual Repository Structure
+
+```text
+configs/
   paths.yaml
+
 docs/
   architecture.md
+
 notebooks/
   01_bronze_ingest.py
   02_silver_transform.py
   03_gold_aggregations.py
   04_data_quality_checks.py
+
 src/
   io/
-    readers.py     # read_parquet_glob, read_delta
-    writers.py     # write_delta, write_bronze/silver/gold
+    readers.py
+    writers.py
   transforms/
-    silver.py      # clean, dedupe, join_orders_enriched
-    gold.py        # revenue_by_region, top_products, CLV, order_counts, orders_by_date
+    silver.py
+    gold.py
   quality/
-    checks.py      # check_row_count, check_nulls, check_duplicates, run_quality_checks
+    checks.py
   utils/
-    config.py      # load_config, resolve_path
+    config.py
+
 tests/
-  conftest.py      # spark, sample_customers, sample_orders
+  conftest.py
   test_silver.py
   test_gold.py
   test_checks.py
-requirements.txt
-README.md
+
+.github/workflows/
+  tests.yml
 ```
 
----
-
-## How to run on Databricks
-
-1. **Upload project** to the workspace (repo clone or folder import). Ensure the project root is the working directory (or add it to the Python path in each notebook).
-
-2. **Configure paths** in `configs/paths.yaml` for your lake/mount, for example:
-   ```yaml
-   base_path: "/dbfs/mnt/lake"           # or /Volumes/catalog/schema/volume
-   input_path: "/dbfs/mnt/lake/raw"
-   bronze_path: "/dbfs/mnt/lake/bronze"
-   silver_path: "/dbfs/mnt/lake/silver"
-   gold_path: "/dbfs/mnt/lake/gold"
-   ```
-   Place your parquet files under `input_path` with names matching the `sources` globs (e.g. `customer*.parquet`, `orders*.parquet`).
-
-3. **Run notebooks in order** on a cluster with PySpark + Delta:
-   - `01_bronze_ingest.py` – ingest parquet to Delta bronze
-   - `02_silver_transform.py` – silver clean and join
-   - `03_gold_aggregations.py` – gold metrics
-   - `04_data_quality_checks.py` – run quality checks
-
-4. **Cluster config:** Use a runtime that includes Delta (e.g. Databricks Runtime). No need to install packages if using the repo’s `requirements.txt` as a cluster library; otherwise install `pyspark`, `delta-spark`, `pyyaml` on the cluster.
+The notebooks orchestrate the pipeline.  
+All business logic lives in `src/` modules.
 
 ---
 
-## Configuration example
+## Medallion Architecture
+
+```
+                    CONFIG (configs/paths.yaml)
+          input_path | bronze_path | silver_path | gold_path
+                                │
+  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+  │   PARQUET   │────▶│   BRONZE    │────▶│   SILVER    │────▶│    GOLD     │
+  │ customers   │     │ Raw + Meta  │     │ Cleaned +   │     │ Retail      │
+  │ orders      │     │ _ingestion  │     │ Enriched    │     │ Metrics     │
+  │ products    │     │ _source     │     │ Joined      │     │ Tables      │
+  │ regions     │     │             │     │             │     │             │
+  └─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+                                                        │
+                                                  ┌─────▼─────┐
+                                                  │  QUALITY  │
+                                                  │ Checks    │
+                                                  └───────────┘
+```
+
+- **Bronze**: Raw parquet ingestion with metadata.
+- **Silver**: Standardization, deduplication, and fact enrichment.
+- **Gold**: Aggregated retail metrics ready for reporting.
+- **Quality**: Sanity checks on curated datasets.
+
+---
+
+## Bronze Layer – Parquet → Delta
+
+**Notebook:** `01_bronze_ingest.py`
+
+- Loads YAML configuration via `load_config()`.
+- Reads parquet using `read_parquet_glob()`.
+- Adds ingestion metadata:
+  - `_ingestion_ts`
+  - `_source_file`
+- Writes Delta tables using `write_bronze()` in **overwrite mode**.
+
+Bronze tables:
+- `bronze_customers`
+- `bronze_orders`
+- `bronze_products`
+- `bronze_regions`
+
+Each run overwrites target paths.  
+There is no incremental ingestion or MERGE logic in this implementation.
+
+---
+
+## Silver Layer – Cleaning and Enrichment
+
+**Notebook:** `02_silver_transform.py`  
+**Module:** `src/transforms/silver.py`
+
+Key transformation patterns:
+
+- `standardize_string_columns()`  
+  - Trims whitespace  
+  - Converts empty strings to null  
+
+- `deduplicate_by_key()`  
+  - Keeps one row per business key  
+  - Prefers latest `_ingestion_ts` when available  
+
+Entity transforms:
+- `transform_customers()`
+- `transform_products()`
+- `transform_regions()`
+- `transform_orders()`
+
+Enrichment:
+- `join_orders_enriched()`  
+  - Left joins orders with customers, products, and regions  
+  - Produces `silver_orders_enriched`
+
+Silver tables:
+- `silver_customers`
+- `silver_orders`
+- `silver_products`
+- `silver_regions`
+- `silver_orders_enriched`
+
+All writes use overwrite mode.
+
+---
+
+## Gold Layer – Retail Metrics
+
+**Notebook:** `03_gold_aggregations.py`  
+**Module:** `src/transforms/gold.py`
+
+Aggregations include:
+
+- `gold_revenue_by_region()`  
+- `gold_top_products()`  
+- `gold_customer_lifetime_value()` (CLV proxy via grouped revenue)  
+- `gold_order_counts()`  
+- `gold_orders_by_date()`  
+
+Gold tables:
+- `gold_revenue_by_region`
+- `gold_top_products`
+- `gold_customer_lifetime_value`
+- `gold_order_counts`
+- `gold_orders_by_date`
+
+Aggregations rely on `groupBy()` logic and inferred amount/date columns.  
+All outputs are written using overwrite mode.
+
+---
+
+## Data Quality Layer
+
+**Notebook:** `04_data_quality_checks.py`  
+**Module:** `src/quality/checks.py`
+
+Checks implemented:
+
+- `check_row_count()`  
+- `check_nulls()`  
+- `check_duplicates()`  
+- `run_quality_checks()` orchestration wrapper  
+
+Checks return structured dictionaries indicating pass/fail status and metrics.  
+They are informational and do not block downstream steps.
+
+---
+
+## Configuration
+
+All paths and source patterns are defined in:
+
+```
+configs/paths.yaml
+```
+
+Example local configuration:
 
 ```yaml
-# configs/paths.yaml – local
 base_path: "data"
 input_path: "data/raw"
 bronze_path: "data/bronze"
@@ -116,56 +236,74 @@ sources:
   orders: "orders*.parquet"
   products: "products*.parquet"
   regions: "regions*.parquet"
-
-# On Databricks, override with absolute paths:
-# input_path: "/dbfs/mnt/lake/raw"
-# bronze_path: "/dbfs/mnt/lake/bronze"
-# ...
 ```
 
-Paths can be relative (resolved from project root) or absolute. Use absolute paths for Databricks mounts/volumes so the same notebooks work without changing code.
+On Databricks, paths can be replaced with mount or volume paths.  
+The code reads whatever values are supplied in YAML.
 
 ---
 
-## Tables produced
+## Running on Databricks
 
-| Layer   | Tables |
-|--------|--------|
-| **Bronze** | `bronze_customers`, `bronze_orders`, `bronze_products`, `bronze_regions` (raw + `_ingestion_ts`, `_source_file`) |
-| **Silver** | `silver_customers`, `silver_orders`, `silver_products`, `silver_regions`, `silver_orders_enriched` (orders joined with dimensions) |
-| **Gold**  | `gold_revenue_by_region`, `gold_top_products`, `gold_customer_lifetime_value`, `gold_order_counts`, `gold_orders_by_date` |
+1. Clone or import repository into workspace  
+2. Update `configs/paths.yaml`  
+3. Attach cluster with Delta support  
+4. Run notebooks sequentially:
+   - Bronze  
+   - Silver  
+   - Gold  
+   - Quality  
 
-Schema details depend on your source parquet; column names in code (e.g. `customer_id`, `amount`, `order_date`) are inferred or can be adjusted in `src/transforms/silver.py` and `src/transforms/gold.py`.
-
----
-
-## What we improved in V2 vs V1
-
-| Area | V1 | V2 |
-|------|----|----|
-| **Layout** | Monolithic scripts / single .dbc | Clear split: `configs/`, `notebooks/`, `src/`, `tests/`, `docs/` |
-| **I/O** | Inline read/write in pipeline | Dedicated `src/io/readers.py` and `writers.py`; configurable paths |
-| **Transforms** | Mixed in notebooks | `src/transforms/silver.py` and `gold.py`; reusable and testable |
-| **Quality** | None | `src/quality/checks.py` + notebook `04_data_quality_checks.py` |
-| **Config** | Hardcoded or minimal | YAML in `configs/`; `src/utils/config.py`; easy Databricks overrides |
-| **Gold** | Generic metrics | Explicit business tables: revenue by region, top products, CLV proxy, order counts, orders by date |
-| **Tests** | None | `tests/` with unit-style tests for silver, gold, and quality checks |
-| **Docs** | Short README | Senior-level README: architecture, run instructions, config example, table list, V2 vs V1 |
+No scheduler or job orchestration is defined in this repository.
 
 ---
 
-## Running tests locally
+## Testing and CI
 
-From the project root (with `requirements.txt` installed):
+### Pytest
 
-```bash
-pytest tests/ -v
+- Unit tests validate Silver transformations.
+- Unit tests validate Gold aggregations.
+- Unit tests validate data quality checks.
+- Spark session is provided via `conftest.py`.
+
+Run locally:
+
+```
+pip install -r requirements.txt
+pytest -v
 ```
 
-Use a local Spark session (see `tests/conftest.py`).
+### GitHub Actions
+
+`.github/workflows/tests.yml`
+
+- Runs on push and pull request to `main`
+- Installs dependencies
+- Executes pytest
+
+CI validates transformation logic automatically.
 
 ---
 
-## Author
+## Technical Stack
 
-Pavan Kolli
+- PySpark
+- Delta Lake
+- YAML configuration
+- pytest
+- GitHub Actions CI
+
+---
+
+## What This Project Demonstrates
+
+- Structured Medallion architecture implementation
+- Modular PySpark design
+- Clean separation of concerns
+- Config-driven portability (local ↔ Databricks)
+- Basic data quality validation patterns
+- Unit testing for Spark transformations
+- CI integration for data pipeline code
+
+This project is positioned as a clear, structured Retail Analytics pipeline suitable for a mid-level Data Engineer portfolio.
