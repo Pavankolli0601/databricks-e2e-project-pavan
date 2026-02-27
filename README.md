@@ -1,5 +1,5 @@
 # Databricks End-to-End Data Engineering Project (Version 2)
-
+![CI](https://github.com/Pavankolli0601/databricks-e2e-project-pavan/actions/workflows/tests.yml/badge.svg)
 Enterprise-lite PySpark pipeline: Bronze → Silver → Gold with Delta Lake, modular code, and basic data quality checks.
 
 ---
